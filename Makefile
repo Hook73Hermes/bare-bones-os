@@ -1,3 +1,6 @@
+# Emulatore utilizzato
+QEMU = qemu-system-i386
+
 # Percorsi del Cross-Compiler
 CC = $(HOME)/opt/cross/bin/i686-elf-gcc
 AS = $(HOME)/opt/cross/bin/i686-elf-as
@@ -6,6 +9,11 @@ AS = $(HOME)/opt/cross/bin/i686-elf-as
 SRC_DIR = src
 OBJ_DIR = obj
 BIN_DIR = bin
+ISO_DIR = isodir
+
+# File generati dalla costruzione
+KERNEL_BIN = $(BIN_DIR)/bare-bones-os.bin
+OS_ISO = $(BIN_DIR)/bare-bones-os.iso
 
 # Flag di compilazione per il C
 # -ffreestanding: non c'è libreria standard
@@ -17,36 +25,48 @@ CFLAGS = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -g
 # -lgcc: linka la libreria interna di GCC per le operazioni matematiche
 LDFLAGS = -ffreestanding -O2 -nostdlib -lgcc
 
-# Target predefinito: esegue la costruzione del file binario
-all: $(BIN_DIR)/bare-bones-os.bin
+# Target predefinito 
+all: $(OS_ISO)
+
+# Dipende da: bare-bones-os.bin e grub.cfg
+$(OS_ISO): $(KERNEL_BIN) $(SRC_DIR)/grub.cfg
+	@mkdir -p $(ISO_DIR)/boot/grub
+	@echo ">> Copia del kernel e configurazione..."
+	@cp $(KERNEL_BIN) $(ISO_DIR)/boot/bare-bones-os.bin
+	@cp $(SRC_DIR)/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
+	@echo ">> Generazione immagine ISO con GRUB..."
+	grub-mkrescue -o $(OS_ISO) $(ISO_DIR)
+	@echo ">> Fatto! ISO generata in: $(OS_ISO)"
 
 # Dipende da: boot.o, kernel.o e dallo script del linker
-$(BIN_DIR)/bare-bones-os.bin: $(OBJ_DIR)/boot.o $(OBJ_DIR)/kernel.o $(SRC_DIR)/linker.ld
+$(KERNEL_BIN): $(OBJ_DIR)/boot.o $(OBJ_DIR)/kernel.o $(SRC_DIR)/linker.ld
 	@mkdir -p $(BIN_DIR)
-	@echo "Linking del Kernel..."
+	@echo ">> Linking del Kernel..."
 	$(CC) -T $(SRC_DIR)/linker.ld -o $@ $(OBJ_DIR)/boot.o $(OBJ_DIR)/kernel.o $(LDFLAGS)
-	@echo "Fatto! Kernel generato in: $@"
+	@echo ">> Fatto! Kernel generato in: $@"
+	@if grub-file --is-x86-multiboot $(BIN_DIR)/bare-bones-os.bin; then \
+		echo ">> Successo: Il file è Multiboot compatibile"; \
+	else \
+		echo ">> Errore: Il file NON è Multiboot compatibile"; \
+	fi
 
 # Regola per compilare i file C
 $(OBJ_DIR)/kernel.o: $(SRC_DIR)/kernel.c
 	@mkdir -p $(OBJ_DIR)
-	@echo "Compilazione C: $<"
+	@echo ">> Compilazione C: $<"
 	$(CC) -c $< -o $@ $(CFLAGS)
 
 # Regola per assemblare i file Assembly
 $(OBJ_DIR)/boot.o: $(SRC_DIR)/boot.s
 	@mkdir -p $(OBJ_DIR)
-	@echo "Assemblaggio: $<"
+	@echo ">> Assemblaggio: $<"
 	$(AS) $< -o $@
 
-# Regola per verificare se è un Multiboot valido
-check: $(BIN_DIR)/bare-bones-os.bin
-	@if grub-file --is-x86-multiboot $(BIN_DIR)/bare-bones-os.bin; then \
-		echo "Successo: Il file è Multiboot compatibile"; \
-	else \
-		echo "Errore: Il file NON è Multiboot compatibile"; \
-	fi
+# Regola run per eseguire il sistema operativo tramite CD rom
+run: $(OS_ISO)
+	@echo ">> Avvio dell'emulazione da ISO..."
+	$(QEMU) -cdrom $(OS_ISO)
 
 # Regola di pulizia
 clean:
-	rm -rf $(OBJ_DIR) $(BIN_DIR)
+	rm -rf $(OBJ_DIR) $(BIN_DIR) $(ISO_DIR)

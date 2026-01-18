@@ -54,6 +54,9 @@ dkms.conf
 # debug information files
 *.dwo
 
-# directories for cross-compiler
-/build
-/opt
+# directories to ingore
+.vscode
+obj
+bin
+isodir
+

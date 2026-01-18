@@ -55,5 +55,5 @@ dkms.conf
 *.dwo
 
 # directories for cross-compiler
-/src
+/build
 /opt
